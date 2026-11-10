@@ -1,0 +1,19 @@
+{
+    "name": "hs-math-app",
+    "version": "1.0.0",
+    "private": true,
+    "description": "高中数学研习 · 移动端 App（Capacitor iOS 壳 + 移动端 H5）",
+    "scripts": {
+        "build-data": "node build-data.js",
+        "cap:sync": "npx cap sync ios",
+        "cap:open": "npx cap open ios"
+    },
+    "devDependencies": {
+        "@capacitor/cli": "^5.7.0"
+    },
+    "dependencies": {
+        "@capacitor/core": "^5.7.0",
+        "@capacitor/ios": "^5.7.0",
+        "jsdom": "^31.0.0"
+    }
+}

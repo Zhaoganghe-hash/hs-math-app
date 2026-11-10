@@ -1,0 +1,55 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['www/**', 'ios/**', 'package.json', 'package-lock.json', '.github/workflows/build-ios.yml']
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 同步网页资源
+        run: npx cap copy ios
+
+      - name: 安装 CocoaPods 依赖
+        run: pod install --project-directory=ios/App
+
+      - name: 云端编译（未签名 IPA）
+        run: |
+          set -euxo pipefail
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+          APP="build/Build/Products/Release-iphoneos/App.app"
+          test -d "$APP"
+          rm -rf Payload output
+          mkdir -p Payload output
+          cp -R "$APP" Payload/
+          zip -qry hs-math-study.ipa Payload
+          mv hs-math-study.ipa output/
+
+      - name: 上传 IPA（构建产物）
+        uses: actions/upload-artifact@v4
+        with:
+          name: hs-math-study-ipa
+          path: ios/App/output/*.ipa
+          retention-days: 30

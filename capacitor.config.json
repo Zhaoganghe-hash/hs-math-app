@@ -1,0 +1,12 @@
+{
+    "appId": "cn.berlinedu.hsmath",
+    "appName": "高中数学研习",
+    "webDir": "www",
+    "ios": {
+        "contentInset": "always",
+        "backgroundColor": "#0d1b33"
+    },
+    "server": {
+        "androidScheme": "https"
+    }
+}
