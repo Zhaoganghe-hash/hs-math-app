@@ -7,3 +7,4 @@ ios/DerivedData/
 *.ipa
 r2_32pyh
 .DS_Store
+www/courses.json

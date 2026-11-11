@@ -42,6 +42,22 @@
           .catch(function () { return { ok: false, offline: true }; });
     }
 
+    /* ---- 远程课程表：服务器更新课程/视频后，App 重开即生效，无需重装 ---- */
+    var COURSE_CACHE = 'hs_courses_v1';
+
+    function applyCourses(json) {
+        if (!json || !json.grades || !json.byGrade) return false;
+        DATA = json;
+        window.HS_DATA = json;
+        return true;
+    }
+
+    function fetchCourses() {
+        return fetch(API_BASE + '/api/app/courses?sharecode=' + SHARE, { method: 'GET' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .catch(function () { return null; });
+    }
+
     function addRecord(rec) {
         var row = {
             source: rec.source,
@@ -590,5 +606,23 @@
         app.innerHTML = '<div class="empty">数据未加载，请先运行 node build-data.js</div>';
         return;
     }
+
+    // 1) 先用上次缓存的远程课程表（离线也最新）
+    var cachedCourses = lsGet(COURSE_CACHE, null);
+    if (cachedCourses) applyCourses(cachedCourses);
+
     route();
+
+    // 2) 后台静默拉取最新课程表，有变化则刷新界面（作答中不打断）
+    fetchCourses().then(function (json) {
+        if (!json || !json.grades) return;
+        if (cachedCourses && json.version === cachedCourses.version) return;
+        lsSet(COURSE_CACHE, json);
+        if (applyCourses(json)) {
+            var view = (location.hash.replace(/^#\/?/, '').split('/')[0]) || 'home';
+            if (view === 'lesson') return; // 正在上课/答题，下次进入生效
+            route();
+            if (cachedCourses) toast('课程内容已更新');
+        }
+    });
 })();

@@ -6,7 +6,8 @@
     "scripts": {
         "build-data": "node build-data.js",
         "cap:sync": "npx cap sync ios",
-        "cap:open": "npx cap open ios"
+        "cap:open": "npx cap open ios",
+        "build-courses": "node build-courses.js"
     },
     "devDependencies": {
         "@capacitor/cli": "^5.7.0"

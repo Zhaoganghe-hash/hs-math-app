@@ -13,10 +13,14 @@ const dom = new JSDOM('<!DOCTYPE html><html><body><div id="app"></div></body></h
 });
 const { window } = dom;
 
-// fetch 桩：记录上报
+// fetch 桩：记录上报；GET /api/app/courses 模拟服务端不可用（走内置课程表兜底）
 window.fetch = function (url, opts) {
+    const isGet = !opts || !opts.method || opts.method === 'GET';
+    if (isGet) {
+        return Promise.resolve({ ok: false, json: function () { return Promise.resolve({}); } });
+    }
     posted.push({ url, body: opts ? JSON.parse(opts.body) : null });
-    return Promise.resolve({ json: function () { return Promise.resolve({ ok: true }); } });
+    return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ ok: true }); } });
 };
 // 其他浏览器 API 桩
 window.scrollTo = function () {};
