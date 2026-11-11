@@ -4,8 +4,8 @@
 (function () {
     'use strict';
 
-    var REMOTE_BASE = 'https://lead-workbench-53178.app.workbuddy.host';
-    var SHARE = '3JKFOEQJKJ'; // 平台网关要求所有请求带 sharecode
+    var REMOTE_BASE = 'https://hs-math-study-97106.app.workbuddy.host';
+    var SHARE = 'SAIUBL3ZQI'; // 平台网关要求所有请求带 sharecode
     var IS_NATIVE = location.protocol === 'capacitor:' || location.protocol === 'file:';
     var API_BASE = IS_NATIVE ? REMOTE_BASE : '';
 
