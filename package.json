@@ -15,6 +15,7 @@
     "dependencies": {
         "@capacitor/core": "^5.7.0",
         "@capacitor/ios": "^5.7.0",
-        "jsdom": "^31.0.0"
+        "jsdom": "^31.0.0",
+        "@capacitor/android": "^5.7.0"
     }
 }
