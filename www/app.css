@@ -210,4 +210,32 @@ body { overscroll-behavior-y: none; }
 .mx-overline { border-top: 1px solid currentColor; }
 .mx-fn { font-family: sans-serif; }
 
-.empty { text-align: center; color: var(--muted); font-size: 13px; padding: 40px 0; }
+.empty { text-align: center; color: var(--muted); font-size: 13px; padding: 40px 0; line-height: 1.9; }
+
+/* ===== 全真模拟 ===== */
+.task-mock { background: linear-gradient(135deg, rgba(255, 125, 0, .26), rgba(255, 255, 255, .06) 60%); border-color: rgba(255, 155, 60, .38); }
+
+.mock-item {
+    background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px;
+    box-shadow: 0 2px 10px rgba(22, 93, 255, .05);
+}
+.mock-item:active { background: #f7f9ff; }
+.mock-title { font-size: 15px; font-weight: 700; line-height: 1.5; }
+.mock-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.mtag { font-size: 11px; color: #4e5969; background: #f2f3f5; padding: 3px 8px; border-radius: 999px; }
+.mock-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 11px; }
+.mock-best { font-size: 12px; color: var(--muted); }
+
+.exam-bar {
+    position: sticky; top: calc(var(--safe-top) - 16px); z-index: 30;
+    display: flex; align-items: center; gap: 10px; background: #12233f; color: #fff;
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
+}
+.exam-label { font-size: 11px; color: #9db7e8; }
+.exam-clock { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+.exam-progress { margin-left: auto; font-size: 12px; color: #b8c8e6; }
+.exam-progress b { color: #fff; }
+.q-score { margin-left: auto; font-size: 11px; color: #ff7d00; font-weight: 600; }
+.exam-note { font-size: 11px; color: var(--muted); text-align: center; margin-top: 10px; line-height: 1.7; }
+.q-img { display: block; max-width: 100%; border-radius: 6px; margin: 6px 0; }
+

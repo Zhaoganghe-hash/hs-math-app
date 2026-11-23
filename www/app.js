@@ -137,7 +137,7 @@
         if (view === 'home') return renderHome();
         if (view === 'list') return renderList();
         if (view === 'lesson') return renderLesson(parts[1]);
-        if (view === 'quiz') return renderQuizCenter();
+        if (view === 'mock') return parts[1] ? renderMockPaper(parts[1]) : renderMockList();
         return renderHome();
     }
 
@@ -169,14 +169,14 @@
                     '</div>' +
                     '<div class="task-go">开始上课 ›</div>' +
                 '</div>' +
-                '<div class="task-card task-quiz" data-go="#/quiz">' +
-                    '<div class="task-icon">📝</div>' +
+                '<div class="task-card task-mock" data-go="#/mock">' +
+                    '<div class="task-icon">📄</div>' +
                     '<div class="task-body">' +
-                        '<div class="task-title">课堂检测</div>' +
-                        '<div class="task-desc">每节课 6 道题（选择 + 填空 + 简答），全面检测本节学习效果</div>' +
-                        '<div class="task-meta">成绩自动记录 · 老师端可查看</div>' +
+                        '<div class="task-title">全真模拟</div>' +
+                        '<div class="task-desc">老师上传的全真模拟卷，按考试时间限时作答，交卷即可看成绩</div>' +
+                        '<div class="task-meta">客观题自动判分 · 解答题对照答案自评 · 成绩回传老师</div>' +
                     '</div>' +
-                    '<div class="task-go">去检测 ›</div>' +
+                    '<div class="task-go">进入模拟 ›</div>' +
                 '</div>' +
             '</div>' + tabbar(0);
 
@@ -537,59 +537,339 @@
         renderResult();
     }
 
-    /* ---------------- 检测中心 ---------------- */
-    function renderQuizCenter() {
-        var grades = DATA.grades, g = grade();
-        var chapters = DATA.byGrade[g] || [];
-        var results = quizResults();
-        var all = [];
-        chapters.forEach(function (ch) { ch.lessons.forEach(function (l) { all.push(l); }); });
-        var done = all.filter(function (l) { return results[l.id]; }).length;
-        var pct = all.length ? Math.round(done / all.length * 100) : 0;
+    /* ---------------- 全真模拟 ---------------- */
+    var MOCK_BEST = 'hs_mock_best';
+    function mockBest() { return lsGet(MOCK_BEST, {}); }
+    function setMockBest(id, res) {
+        var all = mockBest();
+        if (!all[id] || res.score > all[id].score) { all[id] = res; lsSet(MOCK_BEST, all); }
+    }
 
-        var html = '<div class="screen">' +
-            '<div class="page-head"><div><div class="page-title">课堂检测</div>' +
-            '<div class="page-sub">' + esc(g) + ' · 已完成 ' + done + '/' + all.length + ' 课时</div></div></div>' +
-            '<div class="grade-switch light">' + grades.map(function (x) {
+    function apiGet(path) {
+        var url = API_BASE + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'sharecode=' + SHARE;
+        return fetch(url, { method: 'GET' }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        });
+    }
+
+    // 题干支持换行与图片：![说明](https://...)
+    function rich(s) {
+        return String(s == null ? '' : s).split(/(!\[[^\]]*\]\([^)]+\))/g).map(function (t) {
+            var m = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(t);
+            if (m) return '<img class="q-img" src="' + esc(m[2]) + '" alt="' + esc(m[1]) + '">';
+            return mx(t).replace(/\n/g, '<br>');
+        }).join('');
+    }
+
+    function clockText(sec) {
+        sec = Math.max(0, Math.round(sec));
+        var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+        var p = function (n) { return String(n).padStart(2, '0'); };
+        return h > 0 ? h + ':' + p(m) + ':' + p(s) : m + ':' + p(s);
+    }
+
+    function renderMockList() {
+        var g = grade();
+        app.innerHTML = '<div class="screen">' +
+            '<div class="page-head"><div class="back-btn" data-go="#/home">‹</div>' +
+            '<div><div class="page-title">全真模拟</div><div class="page-sub">限时作答 · 交卷即出分 · 成绩回传老师</div></div></div>' +
+            '<div class="grade-switch light">' + DATA.grades.map(function (x) {
                 return '<div class="grade-item' + (x === g ? ' active' : '') + '" data-g="' + esc(x) + '">' + esc(x) + '</div>';
             }).join('') + '</div>' +
-            '<div class="progress-card"><div class="progress-top"><span>检测进度</span><span>' + pct + '%</span></div>' +
-            '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div></div>';
-
-        chapters.forEach(function (ch) {
-            html += '<div class="chapter"><div class="ch-head"><div><div class="ch-name">' + esc(ch.name) + '</div>' +
-                '<div class="ch-sub">' + ch.lessons.length + ' 课时</div></div></div><div class="lessons">';
-            ch.lessons.forEach(function (l) {
-                var r = results[l.id];
-                html += '<div class="lesson" data-go="#/lesson/' + esc(l.id) + '?jump=quiz">' +
-                    '<div class="lesson-main"><div class="lesson-name">' + mx(l.name) + '</div>' +
-                    '<div class="lesson-meta">' + (r ? '<span class="score">' + r.score + '/' + r.total + ' 分</span><span>·</span><span>' + esc(r.date) + '</span>'
-                        : '<span>未检测</span>') + '</div></div>' +
-                    '<div class="lesson-go">' + (r ? '重做 ›' : '开始 ›') + '</div></div>';
-            });
-            html += '</div></div>';
-        });
-
-        html += '</div>' + tabbar(1);
-        app.innerHTML = html;
+            '<div id="mockList"><div class="empty">正在加载试卷…</div></div></div>' + tabbar(1);
 
         app.querySelectorAll('.grade-item').forEach(function (el) {
-            el.addEventListener('click', function () { setGrade(el.getAttribute('data-g')); renderQuizCenter(); });
+            el.addEventListener('click', function () { setGrade(el.getAttribute('data-g')); renderMockList(); });
         });
         app.querySelectorAll('[data-go]').forEach(function (el) {
+            el.addEventListener('click', function () { go(el.getAttribute('data-go')); });
+        });
+
+        apiGet('/api/app/mock-papers').then(function (res) {
+            var box = document.getElementById('mockList');
+            if (!box) return;
+            var papers = (res && res.papers) || [];
+            if (!papers.length) {
+                box.innerHTML = '<div class="empty">老师还没有上传全真模拟卷<br>上传后会显示在这里</div>';
+                return;
+            }
+            var mine = papers.filter(function (p) { return !p.grade || p.grade === g; });
+            var others = papers.filter(function (p) { return p.grade && p.grade !== g; });
+            var list = mine.length ? mine : papers;
+            var best = mockBest();
+            box.innerHTML = list.map(function (p) {
+                var b = best[p.id];
+                return '<div class="mock-item" data-go="#/mock/' + esc(p.id) + '">' +
+                    '<div class="mock-title">' + esc(p.title) + '</div>' +
+                    '<div class="mock-tags">' +
+                        '<span class="mtag">' + esc(p.grade || '通用') + '</span>' +
+                        '<span class="mtag">' + p.q_count + ' 题</span>' +
+                        '<span class="mtag">' + p.total_score + ' 分</span>' +
+                        '<span class="mtag">' + p.duration_min + ' 分钟</span>' +
+                    '</div>' +
+                    '<div class="mock-foot"><span class="mock-best">' + (b ? '我的最好成绩 ' + b.score + '/' + b.total : '尚未作答') + '</span>' +
+                    '<span class="lesson-go">' + (b ? '再练一次 ›' : '开始答题 ›') + '</span></div>' +
+                '</div>';
+            }).join('') + (mine.length && others.length ? '<div class="tip">其他年级还有 ' + others.length + ' 份试卷，可切换年级查看</div>' : '');
+            box.querySelectorAll('[data-go]').forEach(function (el) {
+                el.addEventListener('click', function () { go(el.getAttribute('data-go')); });
+            });
+        }).catch(function () {
+            var box = document.getElementById('mockList');
+            if (box) box.innerHTML = '<div class="empty">试卷加载失败，请检查网络后重试</div>';
+        });
+    }
+
+    function renderMockPaper(id) {
+        app.innerHTML = '<div class="screen"><div class="empty">正在加载试卷…</div></div>';
+        apiGet('/api/app/mock-paper?id=' + encodeURIComponent(id)).then(function (paper) {
+            if (!paper || !paper.questions || !paper.questions.length) {
+                app.innerHTML = '<div class="screen"><div class="empty">试卷不存在或已下线</div></div>';
+                return;
+            }
+            state = {
+                paper: paper,
+                answers: {},
+                remain: Math.max(1, Number(paper.duration_min) || 120) * 60,
+                submitted: false,
+                detail: [],
+                score: 0
+            };
+            renderMockQuiz();
+            startMockTimer();
+        }).catch(function () {
+            app.innerHTML = '<div class="screen"><div class="empty">试卷加载失败，请返回重试</div></div>';
+        });
+    }
+
+    function mockAnsweredCount() {
+        return state.paper.questions.filter(function (q) {
+            var a = state.answers[q.id];
+            return a !== undefined && String(a).trim() !== '';
+        }).length;
+    }
+
+    function renderMockQuiz() {
+        var p = state.paper, qs = p.questions;
+        var html = '<div class="screen">' +
+            '<div class="page-head"><div class="back-btn" id="backMock">‹</div>' +
+            '<div><div class="page-title">' + esc(p.title) + '</div>' +
+            '<div class="page-sub">' + esc(p.grade || '') + ' · 共 ' + qs.length + ' 题 · 满分 ' + p.total_score + ' 分</div></div></div>' +
+            '<div class="exam-bar"><span class="exam-label">剩余时间</span>' +
+            '<span class="exam-clock" id="mockClock">' + clockText(state.remain) + '</span>' +
+            '<span class="exam-progress">已答 <b id="mockAnswered">' + mockAnsweredCount() + '</b>/' + qs.length + '</span></div>';
+
+        qs.forEach(function (q, i) {
+            var ans = state.answers[q.id];
+            html += '<div class="q-card">' +
+                '<div class="q-top"><span class="q-no">' + (i + 1) + '</span>' +
+                '<span class="q-type">' + (q.type === 'choice' ? '选择题' : q.type === 'fill' ? '填空题' : '解答题') + '</span>' +
+                '<span class="q-score">' + q.score + ' 分</span></div>' +
+                '<div class="q-stem">' + rich(q.stem) + '</div>';
+
+            if (q.type === 'choice') {
+                (q.options || []).forEach(function (opt, idx) {
+                    html += '<div class="option' + (ans === idx ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
+                        '<span class="opt-key">' + 'ABCDEFGH'[idx] + '</span><div class="opt-text">' + rich(opt) + '</div></div>';
+                });
+            } else if (q.type === 'fill') {
+                html += '<input class="fill-input" data-q="' + esc(q.id) + '" placeholder="填写答案" value="' + esc(ans || '') + '">';
+            } else {
+                html += '<textarea class="essay-input" maxlength="800" data-q="' + esc(q.id) + '" placeholder="写出解答过程">' + esc(ans || '') + '</textarea>';
+            }
+            html += '</div>';
+        });
+
+        html += '<button class="btn primary big" id="mockSubmit">交卷</button>' +
+            '<div class="exam-note">交卷后客观题自动判分，解答题对照参考答案自评</div></div>';
+        app.innerHTML = html;
+
+        document.getElementById('backMock').addEventListener('click', confirmLeaveMock);
+        app.querySelectorAll('.option').forEach(function (el) {
             el.addEventListener('click', function () {
-                var v = el.getAttribute('data-go');
-                var m = /^#\/lesson\/([^?]+)\?jump=quiz$/.exec(v);
-                if (m) renderLesson(m[1], true); else go(v);
+                var qid = el.getAttribute('data-q');
+                var q = state.paper.questions.filter(function (x) { return x.id === qid; })[0];
+                if (!q) return;
+                state.answers[qid] = Number(el.getAttribute('data-i'));
+                el.parentNode.querySelectorAll('.option').forEach(function (o) { o.classList.remove('active'); });
+                el.classList.add('active');
+                var cnt = document.getElementById('mockAnswered');
+                if (cnt) cnt.textContent = mockAnsweredCount();
             });
         });
+        app.querySelectorAll('input[data-q], textarea[data-q]').forEach(function (el) {
+            el.addEventListener('input', function () {
+                state.answers[el.getAttribute('data-q')] = el.value;
+                var cnt = document.getElementById('mockAnswered');
+                if (cnt) cnt.textContent = mockAnsweredCount();
+            });
+        });
+        document.getElementById('mockSubmit').addEventListener('click', function () { submitMock(false); });
+    }
+
+    function startMockTimer() {
+        stopTimer();
+        timer = setInterval(function () {
+            state.remain -= 1;
+            var clock = document.getElementById('mockClock');
+            if (state.remain <= 0) {
+                state.remain = 0;
+                if (clock) clock.textContent = '0:00';
+                stopTimer();
+                if (!state.submitted) {
+                    toast('考试时间到，已自动交卷', 2200);
+                    submitMock(true);
+                }
+                return;
+            }
+            if (clock) clock.textContent = clockText(state.remain);
+        }, 1000);
+    }
+
+    function confirmLeaveMock() {
+        if (state.submitted) { go('#/mock'); return; }
+        if (window.confirm('离开将放弃本次作答，确定离开吗？')) {
+            stopTimer();
+            go('#/mock');
+        }
+    }
+
+    function submitMock(auto) {
+        if (state.submitted) return;
+        var p = state.paper, qs = p.questions;
+        var missing = qs.filter(function (q) {
+            var a = state.answers[q.id];
+            return a === undefined || String(a).trim() === '';
+        });
+        if (!auto && missing.length && !window.confirm('还有 ' + missing.length + ' 题未作答，确定交卷吗？')) return;
+
+        stopTimer();
+        state.submitted = true;
+        state.autoSubmitted = !!auto;
+        var detail = [];
+        qs.forEach(function (q) {
+            var ans = state.answers[q.id];
+            var item = {
+                qid: q.id,
+                type: q.type,
+                max: q.score,
+                score: 0,
+                correct: null,
+                answer: String(ans == null ? '' : ans).slice(0, 300)
+            };
+            if (q.type === 'choice') {
+                item.correct = ans !== undefined && 'ABCDEFGH'[ans] === String(q.answer || '').trim().toUpperCase();
+                item.score = item.correct ? q.score : 0;
+            } else if (q.type === 'fill') {
+                item.correct = norm(ans) === norm(q.answer);
+                item.score = item.correct ? q.score : 0;
+            }
+            detail.push(item);
+        });
+        state.detail = detail;
+        saveMockResult();
+        renderMockResult();
+    }
+
+    function saveMockResult() {
+        var p = state.paper;
+        var score = state.detail.reduce(function (s, d) { return s + (Number(d.score) || 0); }, 0);
+        state.score = score;
+        var total = Number(p.total_score) || 1;
+        post('/api/app/mock-submit', {
+            paper_id: p.id,
+            owner_id: ownerId(),
+            owner_name: remark() || null,
+            grade: grade(),
+            score: score,
+            total: total,
+            detail: state.detail
+        }).then(function (r) {
+            if (r && r.ok) toast('成绩已提交给老师');
+        });
+        setMockBest(p.id, { score: score, total: total, date: new Date().toISOString().slice(0, 10) });
+    }
+
+    function renderMockResult() {
+        var p = state.paper, detail = state.detail;
+        var total = Number(p.total_score) || 1;
+        var pct = Math.round(state.score / total * 100);
+        var word = pct >= 90 ? '接近满分，状态很好' : pct >= 70 ? '达到中上水平，错题及时订正' : pct >= 50 ? '基础题要抓牢，易错点回看课本' : '建议先复习对应章节，再来一次';
+
+        var html = '<div class="screen">' +
+            '<div class="page-head"><div class="back-btn" data-go="#/mock">‹</div>' +
+            '<div><div class="page-title">' + esc(p.title) + '</div>' +
+            '<div class="page-sub">' + (state.autoSubmitted ? '时间到自动交卷 · ' : '') + '得分率 ' + pct + '%</div></div></div>' +
+            '<div class="result-card"><div class="result-score">' + state.score + '<span class="result-total">/' + total + '</span></div>' +
+            '<div class="result-word">' + word + '</div></div>';
+
+        p.questions.forEach(function (q, i) {
+            var d = detail.filter(function (x) { return x.qid === q.id; })[0] || { correct: null, score: 0, answer: '' };
+            var verdict;
+            if (q.type === 'essay') {
+                verdict = d.correct === true ? '✓ 自评正确' : d.correct === false ? '✗ 自评错误' : '待自评';
+                verdict = '<span class="q-verdict ' + (d.correct === true ? 'v-ok' : d.correct === false ? 'v-no' : 'v-wait') + '">' + verdict + '</span>';
+            } else {
+                verdict = '<span class="q-verdict ' + (d.correct ? 'v-ok' : 'v-no') + '">' + (d.correct ? '✓ +' + d.score : '✗ 0') + '</span>';
+            }
+            html += '<div class="q-card"><div class="q-top"><span class="q-no">' + (i + 1) + '</span>' + verdict +
+                '<span class="q-score">' + q.score + ' 分</span></div>' +
+                '<div class="q-stem">' + rich(q.stem) + '</div>';
+
+            if (q.type === 'choice') {
+                var myKey = d.answer === '' || d.answer == null ? '未作答' : (isNaN(Number(d.answer)) ? d.answer : 'ABCDEFGH'[Number(d.answer)]);
+                html += '<div class="r-line">我的答案：<span class="r-strong">' + esc(myKey) + '</span>' +
+                    '　正确答案：<span class="r-strong">' + esc(q.answer) + '</span></div>';
+            } else if (q.type === 'fill') {
+                html += '<div class="r-line">我的答案：<span class="r-strong">' + esc(d.answer || '未作答') + '</span>' +
+                    '　正确答案：<span class="r-strong">' + rich(q.answer) + '</span></div>';
+            } else {
+                html += '<div class="r-line">我的作答：' + (d.answer ? esc(d.answer) : '未作答') + '</div>' +
+                    '<div class="r-line">参考答案：<span class="r-strong">' + rich(q.ref || q.answer || '') + '</span></div>';
+                if (d.correct === null) {
+                    html += '<div class="self-row"><div class="self-btn ok" data-mq="' + esc(q.id) + '" data-ok="1">对照后：我答对了（+' + q.score + '）</div>' +
+                        '<div class="self-btn no" data-mq="' + esc(q.id) + '" data-ok="0">我答错了</div></div>';
+                }
+            }
+            if (q.analysis) html += '<div class="r-line r-ana">解析：' + rich(q.analysis) + '</div>';
+            html += '</div>';
+        });
+
+        html += '<div class="btn-row"><button class="btn ghost" id="mockRedo">重做本卷</button>' +
+            '<button class="btn primary" id="mockBack">返回模拟列表</button></div></div>' + tabbar(1);
+        app.innerHTML = html;
+
+        app.querySelectorAll('[data-mq]').forEach(function (el) {
+            el.addEventListener('click', function () {
+                mockSelfJudge(el.getAttribute('data-mq'), el.getAttribute('data-ok') === '1');
+            });
+        });
+        document.getElementById('mockRedo').addEventListener('click', function () {
+            state = { paper: p, answers: {}, remain: Math.max(1, Number(p.duration_min) || 120) * 60, submitted: false, detail: [], score: 0 };
+            renderMockQuiz();
+            startMockTimer();
+        });
+        document.getElementById('mockBack').addEventListener('click', function () { go('#/mock'); });
+        app.querySelectorAll('[data-go]').forEach(function (el) {
+            el.addEventListener('click', function () { go(el.getAttribute('data-go')); });
+        });
+    }
+
+    function mockSelfJudge(qid, ok) {
+        state.detail = state.detail.map(function (d) {
+            if (d.qid !== qid) return d;
+            return Object.assign({}, d, { correct: ok, score: ok ? Number(d.max) || 0 : 0, self: true });
+        });
+        saveMockResult();
+        renderMockResult();
     }
 
     /* ---------------- 底部 tab ---------------- */
     function tabbar(active) {
         var items = [
             { icon: '🎬', text: '课堂', path: '#/home' },
-            { icon: '📝', text: '检测', path: '#/quiz' }
+            { icon: '📄', text: '模拟', path: '#/mock' }
         ];
         return '<div class="tabbar">' + items.map(function (it, i) {
             return '<div class="tab-item' + (i === active ? ' active' : '') + '" data-tab="' + it.path + '">' +
