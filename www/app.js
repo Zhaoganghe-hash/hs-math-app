@@ -253,8 +253,8 @@
                         '<div class="lesson-main">' +
                             '<div class="lesson-name">' + mx(l.name) + '</div>' +
                             '<div class="lesson-meta">' +
-                                '<span class="dot ' + (l.video ? 'dot-ok' : 'dot-wait') + '"></span>' +
-                                '<span>' + (l.video ? '视频已就绪' : '视频待上传') + '</span>' +
+                                '<span class="dot ' + (l.video || l.online ? 'dot-ok' : 'dot-wait') + '"></span>' +
+                                '<span>' + (l.video ? '视频已就绪' : (l.online ? '免费课程·' + esc(l.online.src || '在线视频') : '视频待上传')) + '</span>' +
                                 '<span>·</span><span>' + mmss(l.seconds || LESSON_SECONDS) + '</span>' +
                                 (r ? '<span>·</span><span class="score">检测 ' + r.score + '/' + r.total + '</span>' : '') +
                             '</div>' +
@@ -312,7 +312,10 @@
         app.innerHTML = '<div class="screen">' + head(l) +
             '<div class="video-box">' + (l.video
                 ? '<video id="vd" src="' + esc(l.video) + '" controls playsinline webkit-playsinline preload="metadata"></video>'
-                : '<div class="video-empty"><div class="ve-icon">📹</div><div class="ve-title">本课时视频待上传</div><div class="ve-desc">老师上传后即可观看（课时 ' + esc(l.id) + '）</div></div>') +
+                : (l.online
+                    ? '<iframe id="vd" src="' + esc(l.online.url) + '" scrolling="no" frameborder="no" allowfullscreen="true" style="width:100%;height:100%;border:0;"></iframe>' +
+                      '<div class="ve-src">免费课程：' + esc(l.online.src || 'B站公开课') + '（需联网观看）</div>'
+                    : '<div class="video-empty"><div class="ve-icon">📹</div><div class="ve-title">本课时视频待上传</div><div class="ve-desc">老师上传后即可观看（课时 ' + esc(l.id) + '）</div></div>')) +
             '</div>' +
             '<div class="timer-card">' +
                 '<div class="timer-label">课堂剩余时间</div>' +
