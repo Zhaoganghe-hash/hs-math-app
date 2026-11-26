@@ -241,3 +241,36 @@ body { overscroll-behavior-y: none; }
 .exam-note { font-size: 11px; color: var(--muted); text-align: center; margin-top: 10px; line-height: 1.7; }
 .q-img { display: block; max-width: 100%; border-radius: 6px; margin: 6px 0; }
 
+
+/* Word 原卷展示（全真模拟） */
+.paper-doc {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 14px;
+  color: #1a1a1a;
+  font-size: 15px;
+  line-height: 1.75;
+  overflow-x: auto;
+}
+.paper-doc p { margin: 6px 0; }
+.paper-doc img { max-width: 100%; height: auto; display: block; margin: 8px auto; }
+.paper-doc table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+.paper-doc td, .paper-doc th { border: 1px solid #bbb; padding: 5px 8px; font-size: 14px; }
+.paper-doc h1, .paper-doc h2, .paper-doc h3 { font-size: 17px; margin: 10px 0 6px; text-align: center; }
+.paper-doc ol, .paper-doc ul { padding-left: 20px; margin: 6px 0; }
+.paper-divider {
+  margin: 14px 0 10px;
+  text-align: center;
+  font-size: 13px;
+  color: #8fa3c8;
+  letter-spacing: 4px;
+}
+.paper-divider::before, .paper-divider::after {
+  content: '';
+  display: inline-block;
+  width: 60px;
+  height: 1px;
+  background: #33415e;
+  vertical-align: middle;
+  margin: 0 10px;
+}

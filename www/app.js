@@ -655,6 +655,7 @@
 
     function renderMockQuiz() {
         var p = state.paper, qs = p.questions;
+        var hasDoc = !!p.paper_html;
         var html = '<div class="screen">' +
             '<div class="page-head"><div class="back-btn" id="backMock">‹</div>' +
             '<div><div class="page-title">' + esc(p.title) + '</div>' +
@@ -663,18 +664,30 @@
             '<span class="exam-clock" id="mockClock">' + clockText(state.remain) + '</span>' +
             '<span class="exam-progress">已答 <b id="mockAnswered">' + mockAnsweredCount() + '</b>/' + qs.length + '</span></div>';
 
+        // Word 原卷：按文档原样展示（含图片），下方题目卡只作答题卡
+        if (hasDoc) {
+            html += '<div class="paper-doc">' + p.paper_html + '</div>' +
+                '<div class="paper-divider">答题卡</div>';
+        }
+
         qs.forEach(function (q, i) {
             var ans = state.answers[q.id];
             html += '<div class="q-card">' +
-                '<div class="q-top"><span class="q-no">' + (i + 1) + '</span>' +
+                '<div class="q-top"><span class="q-no">' + (hasDoc ? (q.no || (i + 1)) : (i + 1)) + '</span>' +
                 '<span class="q-type">' + (q.type === 'choice' ? '选择题' : q.type === 'fill' ? '填空题' : '解答题') + '</span>' +
-                '<span class="q-score">' + q.score + ' 分</span></div>' +
-                '<div class="q-stem">' + rich(q.stem) + '</div>';
+                '<span class="q-score">' + q.score + ' 分</span></div>';
+
+            if (!hasDoc) html += '<div class="q-stem">' + rich(q.stem) + '</div>';
 
             if (q.type === 'choice') {
                 (q.options || []).forEach(function (opt, idx) {
-                    html += '<div class="option' + (ans === idx ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
-                        '<span class="opt-key">' + 'ABCDEFGH'[idx] + '</span><div class="opt-text">' + rich(opt) + '</div></div>';
+                    if (hasDoc) {
+                        html += '<div class="option' + (ans === idx ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
+                            '<span class="opt-key">' + 'ABCDEFGH'[idx] + '</span></div>';
+                    } else {
+                        html += '<div class="option' + (ans === idx ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
+                            '<span class="opt-key">' + 'ABCDEFGH'[idx] + '</span><div class="opt-text">' + rich(opt) + '</div></div>';
+                    }
                 });
             } else if (q.type === 'fill') {
                 html += '<input class="fill-input" data-q="' + esc(q.id) + '" placeholder="填写答案" value="' + esc(ans || '') + '">';
