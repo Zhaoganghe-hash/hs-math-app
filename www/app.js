@@ -668,9 +668,78 @@
         }).length;
     }
 
+    // 把 Word 原卷 HTML 按题号切成每题一段：遍历块级元素，用与解析器同款的题号/大题标题规则切分
+    function splitDocHtml(html, qs) {
+        var wrap = document.createElement('div');
+        wrap.innerHTML = html;
+        var blocks = Array.prototype.slice.call(wrap.childNodes);
+        var textOf = function (n) { return String(n.textContent || '').replace(/\u3000/g, ' ').trim(); };
+        var HEADER_RE = /(单项选择题|多项选择题|单选题|多选题|选择题|填空题|解答题|简答题|计算题|证明题|应用题)/;
+        var hasHeaders = blocks.some(function (n) { return HEADER_RE.test(textOf(n)); });
+        var headerSeen = false;
+        var nos = {};
+        qs.forEach(function (q) { nos[Number(q.no) || 0] = true; });
+        var pre = [], segs = [], cur = null;
+        blocks.forEach(function (n) {
+            var t = textOf(n);
+            // 大题分区标题：只更新「已进入正式题目」的上下文，不切题
+            var probe = t.replace(/[。.：:，,）)】\]]+$/, '');
+            if (probe.length <= 30 && !/[?？]/.test(probe)) {
+                var hm = HEADER_RE.exec(probe);
+                if (hm && (/^[（(【\[]?[一二三四五六七八九十\d]/.test(probe) || /^第\s*[一二三四五六七八九十IⅡⅢⅣV]+\s*卷/.test(probe))) headerSeen = true;
+            }
+            if (!headerSeen) {
+                var hm2 = /^(?:[一二三四五六七八九十]+\s*[、.．]|第\s*[一二三四五六七八九十IⅡⅢⅣV]+\s*卷)\s*(?:单项选择题|多项选择题|单选题|多选题|选择题|填空题|解答题|简答题|计算题|证明题|应用题)/.exec(t);
+                if (hm2) headerSeen = true;
+            }
+            // 题号行且该题号在解析出的题目里：从这里切开
+            var qm = /^(\d{1,3})\s*[.、．]\s*(?!\d)/.exec(t);
+            if (qm && nos[Number(qm[1])] && (!hasHeaders || headerSeen)) {
+                cur = { no: Number(qm[1]), blocks: [n] };
+                segs.push(cur);
+                return;
+            }
+            if (cur) cur.blocks.push(n); else pre.push(n);
+        });
+        return segs.length ? { pre: pre, segs: segs } : null;
+    }
+
+    function docBlocksHtml(blocks) {
+        return blocks.map(function (n) {
+            return n.nodeType === 1 ? n.outerHTML : esc(String(n.nodeValue || ''));
+        }).join('');
+    }
+
+    // 题目作答控件：选择题字母 chips / 填空输入框 / 解答题文本域
+    function answerControls(q, hasDoc) {
+        var ans = state.answers[q.id];
+        var h = '';
+        if (q.type === 'choice') {
+            (q.options || []).forEach(function (opt, idx) {
+                var letter = 'ABCDEFGH'[idx];
+                var active = ans && String(ans).indexOf(letter) >= 0;
+                h += '<div class="option' + (active ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
+                    '<span class="opt-key">' + letter + '</span>' +
+                    (hasDoc ? '' : '<div class="opt-text">' + rich(opt) + '</div>') + '</div>';
+            });
+        } else if (q.type === 'fill') {
+            h += '<input class="fill-input" data-q="' + esc(q.id) + '" placeholder="填写答案" value="' + esc(ans || '') + '">';
+        } else {
+            h += '<textarea class="essay-input" maxlength="800" data-q="' + esc(q.id) + '" placeholder="写出解答过程">' + esc(ans || '') + '</textarea>';
+        }
+        return h;
+    }
+
+    function qTypeLabel(q) {
+        if (q.type !== 'choice') return q.type === 'fill' ? '填空题' : '解答题';
+        var std = String(q.answer || '').toUpperCase().replace(/[^A-H]/g, '');
+        return std.length > 1 ? '多选题' : '选择题';
+    }
+
     function renderMockQuiz() {
         var p = state.paper, qs = p.questions;
         var hasDoc = !!p.paper_html;
+        var doc = hasDoc ? splitDocHtml(p.paper_html, qs) : null;
         var html = '<div class="screen">' +
             '<div class="page-head"><div class="back-btn" id="backMock">‹</div>' +
             '<div><div class="page-title">' + esc(p.title) + '</div>' +
@@ -679,42 +748,41 @@
             '<span class="exam-clock" id="mockClock">' + clockText(state.remain) + '</span>' +
             '<span class="exam-progress">已答 <b id="mockAnswered">' + mockAnsweredCount() + '</b>/' + qs.length + '</span></div>';
 
-        // Word 原卷：按文档原样展示（含图片），下方题目卡只作答题卡
-        if (hasDoc) {
-            html += '<div class="paper-doc">' + p.paper_html + '</div>' +
-                '<div class="paper-divider">答题卡</div>';
+        if (hasDoc && doc) {
+            // Word 原卷逐题排版：每题内容下方紧跟该题作答区
+            if (doc.pre.length) html += '<div class="paper-doc">' + docBlocksHtml(doc.pre) + '</div>';
+            var done = {};
+            doc.segs.forEach(function (seg) {
+                var q = qs.filter(function (x) { return Number(x.no) === seg.no; })[0];
+                done[seg.no] = true;
+                html += '<div class="paper-doc">' + docBlocksHtml(seg.blocks);
+                if (q) {
+                    html += '<div class="q-inline"><div class="q-top"><span class="q-no">' + seg.no + '</span>' +
+                        '<span class="q-type">' + qTypeLabel(q) + '</span>' +
+                        '<span class="q-score">' + q.score + ' 分</span></div>' + answerControls(q, true);
+                }
+                html += '</div>';
+            });
+            // 解析时漏切的题（如纯图形题）兜底补在末尾
+            qs.forEach(function (q, i) {
+                if (done[Number(q.no)]) return;
+                html += '<div class="paper-doc"><div class="q-top"><span class="q-no">' + (q.no || i + 1) + '</span>' +
+                    '<span class="q-type">' + qTypeLabel(q) + '</span>' +
+                    '<span class="q-score">' + q.score + ' 分</span></div>' +
+                    (q.stem ? '<div class="q-stem">' + rich(q.stem) + '</div>' : '') +
+                    answerControls(q, false) + '</div>';
+            });
+        } else {
+            // 切题失败时退回旧版：原卷整卷展示 + 底部集中答题卡
+            if (hasDoc) html += '<div class="paper-doc">' + p.paper_html + '</div><div class="paper-divider">答题卡</div>';
+            qs.forEach(function (q, i) {
+                html += '<div class="q-card"><div class="q-top"><span class="q-no">' + (hasDoc ? (q.no || (i + 1)) : (i + 1)) + '</span>' +
+                    '<span class="q-type">' + qTypeLabel(q) + '</span>' +
+                    '<span class="q-score">' + q.score + ' 分</span></div>';
+                if (!hasDoc) html += '<div class="q-stem">' + rich(q.stem) + '</div>';
+                html += answerControls(q, hasDoc) + '</div>';
+            });
         }
-
-        qs.forEach(function (q, i) {
-            var ans = state.answers[q.id];
-            var std = String(q.answer || '').toUpperCase().replace(/[^A-H]/g, '');
-            var isMulti = q.type === 'choice' && std.length > 1;
-            html += '<div class="q-card">' +
-                '<div class="q-top"><span class="q-no">' + (hasDoc ? (q.no || (i + 1)) : (i + 1)) + '</span>' +
-                '<span class="q-type">' + (q.type === 'choice' ? (isMulti ? '多选题' : '选择题') : q.type === 'fill' ? '填空题' : '解答题') + '</span>' +
-                '<span class="q-score">' + q.score + ' 分</span></div>';
-
-            if (!hasDoc) html += '<div class="q-stem">' + rich(q.stem) + '</div>';
-
-            if (q.type === 'choice') {
-                (q.options || []).forEach(function (opt, idx) {
-                    var letter = 'ABCDEFGH'[idx];
-                    var active = ans && String(ans).indexOf(letter) >= 0;
-                    if (hasDoc) {
-                        html += '<div class="option' + (active ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
-                            '<span class="opt-key">' + letter + '</span></div>';
-                    } else {
-                        html += '<div class="option' + (active ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
-                            '<span class="opt-key">' + letter + '</span><div class="opt-text">' + rich(opt) + '</div></div>';
-                    }
-                });
-            } else if (q.type === 'fill') {
-                html += '<input class="fill-input" data-q="' + esc(q.id) + '" placeholder="填写答案" value="' + esc(ans || '') + '">';
-            } else {
-                html += '<textarea class="essay-input" maxlength="800" data-q="' + esc(q.id) + '" placeholder="写出解答过程">' + esc(ans || '') + '</textarea>';
-            }
-            html += '</div>';
-        });
 
         html += '<button class="btn primary big" id="mockSubmit">交卷</button>' +
             '<div class="exam-note">交卷后自动批阅评分：客观题即时判分，解答题按老师上传的答案解析由 AI 评分</div></div>';

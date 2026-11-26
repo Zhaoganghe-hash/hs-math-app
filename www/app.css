@@ -280,3 +280,12 @@ body { overscroll-behavior-y: none; }
   vertical-align: middle;
   margin: 0 10px;
 }
+/* 原卷逐题排版：每题内容下方紧跟该题作答区 */
+.paper-doc .q-inline {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #d7e2f5;
+}
+.paper-doc .q-top { margin-bottom: 8px; }
+.paper-doc .option { background: #f8faff; }
+.paper-doc .fill-input, .paper-doc .essay-input { background: #f8faff; }
