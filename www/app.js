@@ -646,6 +646,21 @@
         });
     }
 
+    // KaTeX 渲染试卷里的 LaTeX 公式（\(..\) 行内、\[..\] 独立公式）
+    function renderMath() {
+        try {
+            if (window.renderMathInElement) {
+                renderMathInElement(document.getElementById('app'), {
+                    delimiters: [
+                        { left: '\\(', right: '\\)', display: false },
+                        { left: '\\[', right: '\\]', display: true },
+                    ],
+                    throwOnError: false,
+                });
+            }
+        } catch (e) { /* 渲染失败保留原文 */ }
+    }
+
     function mockAnsweredCount() {
         return state.paper.questions.filter(function (q) {
             var a = state.answers[q.id];
@@ -716,6 +731,7 @@
                 document.body.appendChild(ov);
             });
         });
+        renderMath();
         app.querySelectorAll('.option').forEach(function (el) {
             el.addEventListener('click', function () {
                 var qid = el.getAttribute('data-q');
@@ -922,6 +938,7 @@
                 mockSelfJudge(el.getAttribute('data-mq'), el.getAttribute('data-ok') === '1');
             });
         });
+        renderMath();
         document.getElementById('mockRedo').addEventListener('click', function () {
             state = { paper: p, answers: {}, remain: Math.max(1, Number(p.duration_min) || 120) * 60, submitted: false, detail: [], score: 0 };
             renderMockQuiz();

@@ -262,6 +262,8 @@ body { overscroll-behavior-y: none; }
 .img-zoom { position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; z-index: 9999; }
 .img-zoom img { max-width: 96%; max-height: 92%; width: auto; height: auto; }
 .img-zoom-tip { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; color: #ddd; font-size: 13px; }
+.math-fml { white-space: normal; }
+.paper-doc .katex { font-size: 1.1em; }
 .paper-divider {
   margin: 14px 0 10px;
   text-align: center;
