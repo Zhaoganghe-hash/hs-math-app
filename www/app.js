@@ -679,28 +679,41 @@
         var headerSeen = false;
         var nos = {};
         qs.forEach(function (q) { nos[Number(q.no) || 0] = true; });
-        var pre = [], segs = [], cur = null;
+        var pre = [], segs = [], cur = null, pending = [];
         blocks.forEach(function (n) {
             var t = textOf(n);
-            // 大题分区标题：只更新「已进入正式题目」的上下文，不切题
+            // 大题分区标题：只更新「已进入正式题目」的上下文，不切题；
+            // 出现在两题之间时挂到下一题前面（pending），不粘在上一题末尾
+            var isHeader = false;
             var probe = t.replace(/[。.：:，,）)】\]]+$/, '');
             if (probe.length <= 30 && !/[?？]/.test(probe)) {
                 var hm = HEADER_RE.exec(probe);
-                if (hm && (/^[（(【\[]?[一二三四五六七八九十\d]/.test(probe) || /^第\s*[一二三四五六七八九十IⅡⅢⅣV]+\s*卷/.test(probe))) headerSeen = true;
+                if (hm && (/^[（(【\[]?[一二三四五六七八九十\d]/.test(probe) || /^第\s*[一二三四五六七八九十IⅡⅢⅣV]+\s*卷/.test(probe))) isHeader = true;
             }
-            if (!headerSeen) {
+            if (!isHeader) {
                 var hm2 = /^(?:[一二三四五六七八九十]+\s*[、.．]|第\s*[一二三四五六七八九十IⅡⅢⅣV]+\s*卷)\s*(?:单项选择题|多项选择题|单选题|多选题|选择题|填空题|解答题|简答题|计算题|证明题|应用题)/.exec(t);
-                if (hm2) headerSeen = true;
+                if (hm2) isHeader = true;
+            }
+            if (isHeader) {
+                headerSeen = true;
+                if (cur) pending.push(n); else pre.push(n);
+                return;
             }
             // 题号行且该题号在解析出的题目里：从这里切开
             var qm = /^(\d{1,3})\s*[.、．]\s*(?!\d)/.exec(t);
             if (qm && nos[Number(qm[1])] && (!hasHeaders || headerSeen)) {
-                cur = { no: Number(qm[1]), blocks: [n] };
+                cur = { no: Number(qm[1]), blocks: pending.concat([n]) };
+                pending = [];
                 segs.push(cur);
                 return;
             }
             if (cur) cur.blocks.push(n); else pre.push(n);
         });
+        // 收尾仍挂着的大题标题：拼回最后一段
+        if (pending.length) {
+            if (segs.length) segs[segs.length - 1].blocks = segs[segs.length - 1].blocks.concat(pending);
+            else pre = pre.concat(pending);
+        }
         return segs.length ? { pre: pre, segs: segs } : null;
     }
 
@@ -759,9 +772,10 @@
                 if (q) {
                     html += '<div class="q-inline"><div class="q-top"><span class="q-no">' + seg.no + '</span>' +
                         '<span class="q-type">' + qTypeLabel(q) + '</span>' +
-                        '<span class="q-score">' + q.score + ' 分</span></div>' + answerControls(q, true);
+                        '<span class="q-score">' + q.score + ' 分</span></div>' +
+                        answerControls(q, true) + '</div>';
                 }
-                html += '</div>';
+                html += '</div>'; // 闭合 paper-doc，务必保留（否则题卡层层嵌套、宽度越挤越窄）
             });
             // 解析时漏切的题（如纯图形题）兜底补在末尾
             qs.forEach(function (q, i) {
