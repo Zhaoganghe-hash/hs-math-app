@@ -672,21 +672,25 @@
 
         qs.forEach(function (q, i) {
             var ans = state.answers[q.id];
+            var std = String(q.answer || '').toUpperCase().replace(/[^A-H]/g, '');
+            var isMulti = q.type === 'choice' && std.length > 1;
             html += '<div class="q-card">' +
                 '<div class="q-top"><span class="q-no">' + (hasDoc ? (q.no || (i + 1)) : (i + 1)) + '</span>' +
-                '<span class="q-type">' + (q.type === 'choice' ? '选择题' : q.type === 'fill' ? '填空题' : '解答题') + '</span>' +
+                '<span class="q-type">' + (q.type === 'choice' ? (isMulti ? '多选题' : '选择题') : q.type === 'fill' ? '填空题' : '解答题') + '</span>' +
                 '<span class="q-score">' + q.score + ' 分</span></div>';
 
             if (!hasDoc) html += '<div class="q-stem">' + rich(q.stem) + '</div>';
 
             if (q.type === 'choice') {
                 (q.options || []).forEach(function (opt, idx) {
+                    var letter = 'ABCDEFGH'[idx];
+                    var active = ans && String(ans).indexOf(letter) >= 0;
                     if (hasDoc) {
-                        html += '<div class="option' + (ans === idx ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
-                            '<span class="opt-key">' + 'ABCDEFGH'[idx] + '</span></div>';
+                        html += '<div class="option' + (active ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
+                            '<span class="opt-key">' + letter + '</span></div>';
                     } else {
-                        html += '<div class="option' + (ans === idx ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
-                            '<span class="opt-key">' + 'ABCDEFGH'[idx] + '</span><div class="opt-text">' + rich(opt) + '</div></div>';
+                        html += '<div class="option' + (active ? ' active' : '') + '" data-q="' + esc(q.id) + '" data-i="' + idx + '">' +
+                            '<span class="opt-key">' + letter + '</span><div class="opt-text">' + rich(opt) + '</div></div>';
                     }
                 });
             } else if (q.type === 'fill') {
@@ -707,9 +711,22 @@
                 var qid = el.getAttribute('data-q');
                 var q = state.paper.questions.filter(function (x) { return x.id === qid; })[0];
                 if (!q) return;
-                state.answers[qid] = Number(el.getAttribute('data-i'));
-                el.parentNode.querySelectorAll('.option').forEach(function (o) { o.classList.remove('active'); });
-                el.classList.add('active');
+                var letter = 'ABCDEFGH'[Number(el.getAttribute('data-i'))];
+                var std = String(q.answer || '').toUpperCase().replace(/[^A-H]/g, '');
+                if (std.length > 1) {
+                    // 多选题：点击切换选中，答案存按序字母串
+                    var set = String(state.answers[qid] || '').split('');
+                    var pos = set.indexOf(letter);
+                    if (pos >= 0) set.splice(pos, 1); else { set.push(letter); set.sort(); }
+                    state.answers[qid] = set.join('');
+                } else {
+                    state.answers[qid] = letter;
+                }
+                var cur = String(state.answers[qid] || '');
+                el.parentNode.querySelectorAll('.option').forEach(function (o) {
+                    var L = 'ABCDEFGH'[Number(o.getAttribute('data-i'))];
+                    o.classList.toggle('active', cur.indexOf(L) >= 0);
+                });
                 var cnt = document.getElementById('mockAnswered');
                 if (cnt) cnt.textContent = mockAnsweredCount();
             });
@@ -775,7 +792,10 @@
                 answer: String(ans == null ? '' : ans).slice(0, 300)
             };
             if (q.type === 'choice') {
-                item.correct = ans !== undefined && 'ABCDEFGH'[ans] === String(q.answer || '').trim().toUpperCase();
+                // 单选存单字母，多选存按序字母串；统一按字母集合比较
+                var std = String(q.answer || '').toUpperCase().replace(/[^A-H]/g, '').split('').sort().join('');
+                var got = String(ans == null ? '' : ans).toUpperCase().replace(/[^A-H]/g, '').split('').sort().join('');
+                item.correct = got !== '' && got === std;
                 item.score = item.correct ? q.score : 0;
             } else if (q.type === 'fill') {
                 item.correct = norm(ans) === norm(q.answer);
