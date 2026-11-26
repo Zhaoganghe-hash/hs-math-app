@@ -73,35 +73,67 @@ const ONLINE_VIDEOS = {
   'sy-g2-c8-l2': { bvid: 'BV1YmCuBWExP', page: 42, src: '人教版空中课堂' },
 };
 
-// 把在线视频挂到没有本地上传视频的课时上（本地视频优先，不覆盖）
-let onlineCount = 0;
-GRADES.forEach((g) => {
-  out.byGrade[g].forEach((ch) => {
-    ch.lessons.forEach((l) => {
-      if (!l.video && ONLINE_VIDEOS[l.id]) {
-        const v = ONLINE_VIDEOS[l.id];
-        l.online = { bvid: v.bvid, page: v.page, src: v.src,
-          url: BILI + v.bvid + '&page=' + v.page + '&autoplay=0&danmaku=0' };
-        onlineCount++;
+// 构建时从 B 站公开 API 解析每个分P的 cid（bvid+page 嵌入会被播放器忽略 page，
+// 必须用 cid 才能精确跳到对应小节）
+async function fetchCidMap(bvids) {
+  const map = {};
+  for (const bv of bvids) {
+    try {
+      const res = await fetch('https://api.bilibili.com/x/web-interface/view?bvid=' + bv,
+        { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const j = await res.json();
+      if (j.code === 0) {
+        map[bv] = {};
+        j.data.pages.forEach((p) => { map[bv][p.page] = p.cid; });
+        console.log('[build-courses] cid 解析 OK:', bv, j.data.pages.length + 'P');
+      } else {
+        console.warn('[build-courses] cid 解析失败(继续用 page 参数):', bv, j.code, j.message);
       }
+    } catch (e) {
+      console.warn('[build-courses] cid 请求异常(继续用 page 参数):', bv, e.message);
+    }
+  }
+  return map;
+}
+
+async function main() {
+  const cidMap = await fetchCidMap([...new Set(Object.values(ONLINE_VIDEOS).map((v) => v.bvid))]);
+
+  // 把在线视频挂到没有本地上传视频的课时上（本地视频优先，不覆盖）
+  let onlineCount = 0;
+  GRADES.forEach((g) => {
+    out.byGrade[g].forEach((ch) => {
+      ch.lessons.forEach((l) => {
+        if (!l.video && ONLINE_VIDEOS[l.id]) {
+          const v = ONLINE_VIDEOS[l.id];
+          const cid = cidMap[v.bvid] && cidMap[v.bvid][v.page];
+          let url = BILI + v.bvid + '&autoplay=0&danmaku=0';
+          url += cid ? '&cid=' + cid : '&page=' + v.page; // cid 精确；page 兜底
+          l.online = { bvid: v.bvid, page: v.page, cid: cid || 0, src: v.src, url: url };
+          onlineCount++;
+        }
+      });
     });
   });
-});
+  if (!onlineCount) console.warn('[build-courses] 警告：没有课时挂上在线视频！');
 
-// 输出目标：App 服务端（线上 /api/app/courses 数据源）+ App 内置兜底
-const targets = [
-  path.join(__dirname, '..', 'hs-math-study-web', 'courses.json'),
-  path.join(__dirname, 'www', 'courses.json'),
-];
+  // 输出目标：App 服务端（线上 /api/app/courses 数据源）+ App 内置兜底
+  const targets = [
+    path.join(__dirname, '..', 'hs-math-study-web', 'courses.json'),
+    path.join(__dirname, 'www', 'courses.json'),
+  ];
 
-targets.forEach((t) => {
-  fs.mkdirSync(path.dirname(t), { recursive: true });
-  fs.writeFileSync(t, JSON.stringify(out), 'utf8');
-});
+  targets.forEach((t) => {
+    fs.mkdirSync(path.dirname(t), { recursive: true });
+    fs.writeFileSync(t, JSON.stringify(out), 'utf8');
+  });
 
-const kb = Math.round(fs.statSync(targets[0]).size / 1024);
-const lessons = GRADES.reduce((s, g) => s + out.count[g], 0);
-const videos = GRADES.reduce((s, g) => s + out.byGrade[g].reduce((n, c) =>
-  n + c.lessons.filter((l) => l.video).length, 0), 0);
-console.log(`[build-courses] 课时 ${lessons} 节，本地上传视频 ${videos} 节，免费在线课程 ${onlineCount} 节，${kb}KB`);
-targets.forEach((t) => console.log('  ->', t));
+  const kb = Math.round(fs.statSync(targets[0]).size / 1024);
+  const lessons = GRADES.reduce((s, g) => s + out.count[g], 0);
+  const videos = GRADES.reduce((s, g) => s + out.byGrade[g].reduce((n, c) =>
+    n + c.lessons.filter((l) => l.video).length, 0), 0);
+  console.log(`[build-courses] 课时 ${lessons} 节，本地上传视频 ${videos} 节，免费在线课程 ${onlineCount} 节，${kb}KB`);
+  targets.forEach((t) => console.log('  ->', t));
+}
+
+main().catch((e) => { console.error('[build-courses] 构建失败:', e); process.exit(1); });
