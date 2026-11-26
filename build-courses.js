@@ -16,7 +16,7 @@ GRADES.forEach((g) => {
 
 // 免费在线视频（B站公开课程，按课时匹配分P）
 // 优先级：老师本地上传视频(l.video) > 在线免费课程(l.online)
-const BILI = 'https://player.bilibili.com/player.html?bvid=';
+const BILI = 'https://player.bilibili.com/player.html?';
 const ONLINE_VIDEOS = {
   // ===== 必修第一册：泽哥《高一数学必修一同步全集 人教A版》BV1ct4y1t7pv =====
   'sy-g1-c1-l1': { bvid: 'BV1ct4y1t7pv', page: 2,  src: '泽哥·人教A版同步课' },
@@ -73,10 +73,11 @@ const ONLINE_VIDEOS = {
   'sy-g2-c8-l2': { bvid: 'BV1YmCuBWExP', page: 42, src: '人教版空中课堂' },
 };
 
-// 构建时从 B 站公开 API 解析每个分P的 cid（bvid+page 嵌入会被播放器忽略 page，
-// 必须用 cid 才能精确跳到对应小节）
+// 构建时从 B 站公开 API 解析每个分P的 cid 与稿件 aid
+// 嵌入指定分P必须用 aid+cid 组合：bvid+page 会被忽略 page，bvid+cid 也可能被忽略
 async function fetchCidMap(bvids) {
   const map = {};
+  const aids = {};
   for (const bv of bvids) {
     try {
       const res = await fetch('https://api.bilibili.com/x/web-interface/view?bvid=' + bv,
@@ -85,7 +86,8 @@ async function fetchCidMap(bvids) {
       if (j.code === 0) {
         map[bv] = {};
         j.data.pages.forEach((p) => { map[bv][p.page] = p.cid; });
-        console.log('[build-courses] cid 解析 OK:', bv, j.data.pages.length + 'P');
+        aids[bv] = j.data.aid;
+        console.log('[build-courses] cid 解析 OK:', bv, 'aid=' + j.data.aid, j.data.pages.length + 'P');
       } else {
         console.warn('[build-courses] cid 解析失败(继续用 page 参数):', bv, j.code, j.message);
       }
@@ -93,6 +95,7 @@ async function fetchCidMap(bvids) {
       console.warn('[build-courses] cid 请求异常(继续用 page 参数):', bv, e.message);
     }
   }
+  map.__aids = aids;
   return map;
 }
 
@@ -107,8 +110,10 @@ async function main() {
         if (!l.video && ONLINE_VIDEOS[l.id]) {
           const v = ONLINE_VIDEOS[l.id];
           const cid = cidMap[v.bvid] && cidMap[v.bvid][v.page];
-          let url = BILI + v.bvid + '&autoplay=0&danmaku=0';
-          url += cid ? '&cid=' + cid : '&page=' + v.page; // cid 精确；page 兜底
+          const aid = cidMap.__aids && cidMap.__aids[v.bvid];
+          let url = BILI + (aid ? 'aid=' + aid + '&' : '') + (v.bvid ? 'bvid=' + v.bvid + '&' : '') + 'autoplay=0&danmaku=0';
+          url += cid ? '&cid=' + cid : '';
+          url += '&page=' + v.page; // aid 形式下 page 参数生效，与 cid 双保险
           l.online = { bvid: v.bvid, page: v.page, cid: cid || 0, src: v.src, url: url };
           onlineCount++;
         }
