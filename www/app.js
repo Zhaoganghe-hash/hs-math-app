@@ -174,7 +174,7 @@
                     '<div class="task-body">' +
                         '<div class="task-title">全真模拟</div>' +
                         '<div class="task-desc">老师上传的全真模拟卷，按考试时间限时作答，交卷即可看成绩</div>' +
-                        '<div class="task-meta">客观题自动判分 · 解答题对照答案自评 · 成绩回传老师</div>' +
+                        '<div class="task-meta">交卷后全卷自动批阅 · 解答题按答案解析AI评分 · 成绩回传老师</div>' +
                     '</div>' +
                     '<div class="task-go">进入模拟 ›</div>' +
                 '</div>' +
@@ -685,7 +685,7 @@
         });
 
         html += '<button class="btn primary big" id="mockSubmit">交卷</button>' +
-            '<div class="exam-note">交卷后客观题自动判分，解答题对照参考答案自评</div></div>';
+            '<div class="exam-note">交卷后自动批阅评分：客观题即时判分，解答题按老师上传的答案解析由 AI 评分</div></div>';
         app.innerHTML = html;
 
         document.getElementById('backMock').addEventListener('click', confirmLeaveMock);
@@ -773,6 +773,30 @@
         state.detail = detail;
         saveMockResult();
         renderMockResult();
+        // 解答题交给服务端 AI 按上传的答案解析自动批阅；失败则退回对照自评
+        var essays = detail.filter(function (d) { return d.type === 'essay'; });
+        if (essays.length) gradeEssaysRemote(essays);
+    }
+
+    function gradeEssaysRemote(essays) {
+        var p = state.paper;
+        var items = essays.map(function (d) {
+            var q = p.questions.filter(function (x) { return x.id === d.qid; })[0] || {};
+            return { qid: d.qid, stem: q.stem || '', ref: q.ref || '', analysis: q.analysis || '',
+                answer: d.answer || '', score: d.max };
+        });
+        post('/api/app/mock-grade', { owner_id: ownerId(), items: items }).then(function (r) {
+            if (!r || !r.ok || !r.results) { state.aiGrading = false; renderMockResult(); return; }
+            state.detail = state.detail.map(function (d) {
+                var g = r.results.filter(function (x) { return x.qid === d.qid; })[0];
+                if (d.type !== 'essay' || !g) return d;
+                var s = Math.max(0, Math.min(Number(d.max) || 0, Math.round(Number(g.score) || 0)));
+                return Object.assign({}, d, { score: s, correct: s >= (Number(d.max) || 0) * 0.6, comment: g.comment || '', graded: true });
+            });
+            state.aiGrading = false;
+            saveMockResult();
+            renderMockResult();
+        }).catch(function () { state.aiGrading = false; renderMockResult(); });
     }
 
     function saveMockResult() {
@@ -811,8 +835,14 @@
             var d = detail.filter(function (x) { return x.qid === q.id; })[0] || { correct: null, score: 0, answer: '' };
             var verdict;
             if (q.type === 'essay') {
-                verdict = d.correct === true ? '✓ 自评正确' : d.correct === false ? '✗ 自评错误' : '待自评';
-                verdict = '<span class="q-verdict ' + (d.correct === true ? 'v-ok' : d.correct === false ? 'v-no' : 'v-wait') + '">' + verdict + '</span>';
+                if (d.graded) {
+                    verdict = '<span class="q-verdict ' + (d.correct ? 'v-ok' : 'v-no') + '">AI评分 ' + (d.score || 0) + '/' + q.score + '</span>';
+                } else if (state.aiGrading) {
+                    verdict = '<span class="q-verdict v-wait">AI批阅中…</span>';
+                } else {
+                    verdict = d.correct === true ? '✓ 自评正确' : d.correct === false ? '✗ 自评错误' : '待自评';
+                    verdict = '<span class="q-verdict ' + (d.correct === true ? 'v-ok' : d.correct === false ? 'v-no' : 'v-wait') + '">' + verdict + '</span>';
+                }
             } else {
                 verdict = '<span class="q-verdict ' + (d.correct ? 'v-ok' : 'v-no') + '">' + (d.correct ? '✓ +' + d.score : '✗ 0') + '</span>';
             }
@@ -829,8 +859,9 @@
                     '　正确答案：<span class="r-strong">' + rich(q.answer) + '</span></div>';
             } else {
                 html += '<div class="r-line">我的作答：' + (d.answer ? esc(d.answer) : '未作答') + '</div>' +
+                    (d.graded && d.comment ? '<div class="r-line">AI评语：' + esc(d.comment) + '</div>' : '') +
                     '<div class="r-line">参考答案：<span class="r-strong">' + rich(q.ref || q.answer || '') + '</span></div>';
-                if (d.correct === null) {
+                if (!d.graded && d.correct === null && !state.aiGrading) {
                     html += '<div class="self-row"><div class="self-btn ok" data-mq="' + esc(q.id) + '" data-ok="1">对照后：我答对了（+' + q.score + '）</div>' +
                         '<div class="self-btn no" data-mq="' + esc(q.id) + '" data-ok="0">我答错了</div></div>';
                 }
