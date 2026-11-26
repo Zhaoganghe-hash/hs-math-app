@@ -252,12 +252,16 @@ body { overscroll-behavior-y: none; }
   line-height: 1.75;
   overflow-x: auto;
 }
-.paper-doc p { margin: 6px 0; }
-.paper-doc img { max-width: 100%; height: auto; display: block; margin: 8px auto; }
+.paper-doc p { margin: 6px 0; text-align: left; }
+/* Word 公式图片按原始像素导出会非常大：限高内联显示，点击可放大 */
+.paper-doc img { max-width: 100%; max-height: 88px; width: auto; height: auto; display: inline-block; vertical-align: middle; margin: 4px 2px; }
 .paper-doc table { border-collapse: collapse; margin: 8px 0; width: 100%; }
 .paper-doc td, .paper-doc th { border: 1px solid #bbb; padding: 5px 8px; font-size: 14px; }
 .paper-doc h1, .paper-doc h2, .paper-doc h3 { font-size: 17px; margin: 10px 0 6px; text-align: center; }
 .paper-doc ol, .paper-doc ul { padding-left: 20px; margin: 6px 0; }
+.img-zoom { position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.img-zoom img { max-width: 96%; max-height: 92%; width: auto; height: auto; }
+.img-zoom-tip { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; color: #ddd; font-size: 13px; }
 .paper-divider {
   margin: 14px 0 10px;
   text-align: center;

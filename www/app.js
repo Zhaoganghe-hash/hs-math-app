@@ -706,6 +706,16 @@
         app.innerHTML = html;
 
         document.getElementById('backMock').addEventListener('click', confirmLeaveMock);
+        // 原卷图片（公式/图形）点击放大查看
+        app.querySelectorAll('.paper-doc img').forEach(function (img) {
+            img.addEventListener('click', function () {
+                var ov = document.createElement('div');
+                ov.className = 'img-zoom';
+                ov.innerHTML = '<img src="' + img.src + '" alt=""><div class="img-zoom-tip">点击任意位置关闭</div>';
+                ov.addEventListener('click', function () { document.body.removeChild(ov); });
+                document.body.appendChild(ov);
+            });
+        });
         app.querySelectorAll('.option').forEach(function (el) {
             el.addEventListener('click', function () {
                 var qid = el.getAttribute('data-q');
